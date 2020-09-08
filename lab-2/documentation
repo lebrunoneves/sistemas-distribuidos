@@ -1,0 +1,20 @@
+=> CLIENTE
+
+O cliente deve enviar ao servidor o nome dos arquivo a ser analizado. O arquivo deve estar contido na pasta 'db' do servidor para ser encontrado. 
+Para cada arquivo digitado, o servidor retorna a análise do texto ou 'null' caso nao encontre o arquivo.
+São aceitos infinitos nomes de arquivo ou até que o cliente digite 'exit' como condição de parada.
+
+
+=> SERVIDOR
+
+O servidor foi dividido em 3 camadas:
+
+Data Access - Estabelece conexão com o diretório contendo os arquivos a serem analisados. Recebe o nome do arquivo como parâmetro e retorna o conteúdo do arquivo. Retorna'None' caso não encontre o arquivo.
+
+Process - Recebe o conteudo do arquivo a partir da camada de acesso aos dados. 
+Trata a string, removendo quebras de linha e espaços em branco repetidos.
+Para cada palavra contida no arquivo, a adiciona ao dicionário de recorrências e retorna as 10 palavras mais recorrentes no texto.
+
+Interface - estabelece a conexão e controla a entrada e saida de mensagens ao cliente. Para cada nome de arquivo recebido é feita a chamada da rotina de execução da análise do texto da camada de processamento. Caso o arquivo não exista, retorna 'null' ao cliente, do contrário retorna a análise.
+
+
