@@ -1,5 +1,6 @@
 import socket
 import select
+import struct
 import sys
 from threading import Thread, Lock
 from datetime import datetime
@@ -39,6 +40,33 @@ def connect(sock):
 
 	return clisock, endr
 	
+
+def send(sock, data):
+	length = len(data)
+	sock.sendall(struct.pack('!I', length)) # !I = padrão de envio da internet (big-endian) e formato unsigned int
+	sock.sendall(data)
+
+
+def recv(sock):
+	lengthbuf = recvall(sock, 4)
+
+	if not lengthbuf:
+		return None
+
+	length, = struct.unpack('!I', lengthbuf)
+	return recvall(sock, length)
+
+
+def recvall(sock, count):
+	buf = b''
+	while count:
+		newbuf = sock.recv(count)
+		if not newbuf:
+			return None
+		buf += newbuf
+		count -= len(newbuf)
+	return buf
+
 	
 def get_online(my_username):
 	users = list(sessions.keys())
@@ -49,7 +77,7 @@ def get_online(my_username):
 	if not users:
 		return 'Não há usuários online :('
 	
-	users_str = '\n{:^20} ({}):\n'.format('Usuários online', len(users))
+	users_str = '\n{:^20} ({}):\n'.format('usuário(s) online', len(users))
 	
 	for user in users:
 		users_str += '- {:<30}\n'.format(user)
@@ -65,64 +93,69 @@ def attend_request(clisock, endr):
 	username = None
 
 	while True:
-		#recebe a requisicao em bytes
-		req = clisock.recv(1024)
+		try:
+			#recebe a requisicao em bytes
+			req = recv(clisock)
 
-		if not req: # dados vazios: cliente encerrou
-			print('Encerrou conexao: ', str(endr))
-			if username and username in sessions: # tem sessao aberta
-				with lock:
-					del sessions[username]
-				username = None
-			clisock.close() # encerra a conexao com o cliente
-			return 
+			if not req: # dados vazios: cliente encerrou
+				print('Encerrou conexao: ', str(endr))
+				if username and username in sessions: # tem sessao aberta
+					with lock:
+						del sessions[username]
+					username = None
+				clisock.close() # encerra a conexao com o cliente
+				return 
 
-		print(str(endr) + ': ' + str(req, encoding='utf-8'))
+			print(str(endr) + ': ' + str(req, encoding='utf-8'))
 
-		# converte a requisicao para string
-		req = str(req, encoding='utf-8')
+			# converte a requisicao para string
+			req = str(req, encoding='utf-8')
 
-		if req.startswith('login'):
-			try:
+			if req.startswith('login'):
 				if username:
-					clisock.send(str.encode(now() + ' --> Já existe uma sessão ativa. Para alterar o usuário, faça logout.'))
+					send(clisock, str.encode(now() + ' --> Já existe uma sessão ativa. Para alterar o usuário, faça logout.'))
 				else:	
 					username = req.split()[1] # o username passado
 					
 					if username in sessions:
-						clisock.send(str.encode(now() + ' --> O usuário "{}" já existe. Por favor, tente outro nome'.format(username)))
+						send(clisock, str.encode(now() + ' --> O usuário "{}" já existe. Por favor, tente outro nome'.format(username)))
 						username = None
 					else:
 						with lock:
 							sessions[username] = clisock
-						clisock.send(str.encode(now() + ' --> Login realizado com sucesso.'))
-			except:
-				clisock.send(str.encode(now() + ' --> Erro no comando.'))
-		elif req == 'logout':
-			if username and username in sessions:
-				with lock:
-					del sessions[username]
-				username = None
-				clisock.send(str.encode(now() + ' --> Logout realizado com sucesso.'))
-			else:
-				clisock.send(str.encode(now() + ' --> Não há nenhuma sessão ativa.'))
-		elif req == 'online':
-			clisock.send(str.encode(now() + ' --> ' + get_online(username)))
-		elif req.startswith('@'): # envio de mensagem
-			if not username:
-				clisock.send(str.encode(now() + ' --> Faça login antes de enviar mensagens.'))
-			else:
-				user_to = req[1:req.index(' ')] # nome do usuario entre '@' e o primeiro espaço
-				msg = req[req.index(' ')+1:] # mensagem a partir do primeiro espaço (excludente) ate o fim de req
-				
-				if not user_to in sessions:
-					clisock.send(str.encode(now() + ' --> Usuário offline ou não encontrado.'))
+						send(clisock, str.encode(now() + ' --> Login realizado com sucesso.'))
+			elif req == 'logout':
+				if username and username in sessions:
+					with lock:
+						del sessions[username]
+					username = None
+					send(clisock, str.encode(now() + ' --> Logout realizado com sucesso.'))
 				else:
-					clisock.send(str.encode(now() + ' --> mensagem enviada'))
-					clisend = sessions[user_to]
-					clisend.send(str.encode(now() + ' {} diz: '.format(username) + msg))
-		else:
-			clisock.send(str.encode(now() + ' --> Comando inválido.'))
+					send(clisock, str.encode(now() + ' --> Não há nenhuma sessão ativa.'))
+			elif req == 'online':
+				send(clisock, str.encode(now() + ' --> ' + get_online(username)))
+			elif req == 'me':
+				if username:
+					send(clisock, str.encode(now() + ' --> Usuário conectado: {}'.format(username)))
+				else:
+					send(clisock, str.encode(now() + ' --> Nenhum usuário logado'))
+			elif req.startswith('@'): # envio de mensagem
+				if not username:
+					send(clisock, str.encode(now() + ' --> Faça login antes de enviar mensagens.'))
+				else:
+					user_to = req[1:req.index(' ')] # nome do usuario entre '@' e o primeiro espaço
+					msg = req[req.index(' ')+1:] # mensagem a partir do primeiro espaço (excludente) ate o fim de req
+					
+					if not user_to in sessions:
+						send(clisock, str.encode(now() + ' --> Usuário offline ou não encontrado.'))
+					else:
+						send(clisock, str.encode(now() + ' --> mensagem enviada'))
+						clisend = sessions[user_to]
+						send(clisend, str.encode(now() + ' {} diz: '.format(username) + msg))
+			else:
+				send(clisock, str.encode(now() + ' --> Comando inválido.'))
+		except:
+			send(clisock, str.encode(now() + ' --> Erro no comando.'))
 
 def main():
 	client_threads = []
@@ -147,6 +180,7 @@ def main():
 					print('Finalizando conexoes...')
 					for c in client_threads: #aguarda as threads terminarem
 						c.join()
+					print('Finalizado')
 					sock.close()
 					sys.exit()
 				if cmd == 'list':
