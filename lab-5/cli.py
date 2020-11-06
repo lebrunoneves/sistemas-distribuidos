@@ -43,24 +43,6 @@ def initialize_client():
 	return sock
 
 
-def initialize_server():
-	# cria o socket 
-	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #Internet( IPv4 + TCP) 
-
-	# vincula a localizacao do servidor
-	sock.bind((HOST, PORT))
-
-	# coloca-se em modo de espera por conexoes
-	sock.listen(5) 
-
-	# configura o socket para o modo nao-bloqueante
-	sock.setblocking(False)
-
-	# inclui o socket principal na lista de entradas de interesse
-	inputs.append(sock)
-
-	return sock
-
 def send(sock, data):
 	length = len(data)
 	sock.sendall(struct.pack('!I', length))
