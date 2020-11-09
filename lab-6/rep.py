@@ -14,6 +14,7 @@ inputs = [sys.stdin]
 help_list = {
 	'read' : 'Faz a leitura do valor atual de x',
 	'write <value>': 'Atualiza o valor de x',
+	'update': 'Notifica atualizacao de x',
 	'hist': 'Exibe o histórico de atualizações de x',
 	'exit': 'Desliga a réplica'
 }
@@ -216,6 +217,14 @@ while True:
 						hist.append((my_id, int(new_value)))
 						x = new_value
 						print('\tx = {}'.format(x))
+				
+				elif cmd == 'update':
+					with lock:
+						if is_primary and new_value:
+							broadcast_new_value(new_value, my_id)
+							new_value = None
+						else:
+							print('Erro ao executar comando')
 				else:
 					print('\t comando inválido :(')
 			elif req == sock: #pedido de conexao
